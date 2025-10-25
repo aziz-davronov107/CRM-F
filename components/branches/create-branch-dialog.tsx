@@ -7,35 +7,117 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useState } from "react"
+import { Textarea } from "@/components/ui/textarea"
+import { useState, useEffect } from "react"
+import { useBranches } from "@/hooks/use-branches"
+import { useCenters } from "@/hooks/use-centers"
+import { CreateBranchData } from "@/lib/types"
+import { useToast } from "@/hooks/use-toast"
+import { Loader2 } from "lucide-react"
 
 interface CreateBranchDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  onSuccess?: () => void
 }
 
-export function CreateBranchDialog({ open, onOpenChange }: CreateBranchDialogProps) {
-  const [formData, setFormData] = useState({
+export function CreateBranchDialog({ open, onOpenChange, onSuccess }: CreateBranchDialogProps) {
+  const { createBranch } = useBranches()
+
+  const { centers, loading: centersLoading, refetch: refetchCenters } = useCenters({ 
+    limit: 100,
+    enabled: false  // Don't auto-fetch, we'll manual fetch when needed
+  })
+  const { toast } = useToast()
+  const [loading, setLoading] = useState(false)
+
+  // Fetch centers when modal opens
+  useEffect(() => {
+    if (open && centers.length === 0) {
+      console.log('🏢 Modal opened, fetching centers...')
+      refetchCenters()
+    }
+  }, [open, refetchCenters, centers.length])
+  
+  const [formData, setFormData] = useState<CreateBranchData>({
     name: "",
-    location: "",
+    region: "",
+    district: "",
+    address: "",
     phone: "",
-    email: "",
-    manager: "",
-    status: "active",
+    status: "ACTIVE",
+    center_id: 0, // Will be set when centers load
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Set first center as default when centers load
+  useEffect(() => {
+    if (centers.length > 0 && formData.center_id === 0) {
+      setFormData(prev => ({ ...prev, center_id: centers[0].id }))
+    }
+  }, [centers, formData.center_id])
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Handle form submission
-    onOpenChange(false)
+    
+    if (formData.center_id === 0) {
+      toast({
+        title: "Error",
+        description: "Please select a center",
+        variant: "destructive",
+      })
+      return
+    }
+    
+    setLoading(true)
+
+    try {
+      console.log('🚀 Creating branch, waiting for completion...')
+      await createBranch(formData)
+      console.log('✅ Branch created, now refreshing data...')
+      
+      // Wait for parent component to refresh data
+      if (onSuccess) {
+        await onSuccess()
+      }
+      
+      console.log('✅ Data refreshed, showing success and closing modal...')
+      toast({
+        title: "Success",
+        description: "Branch created successfully",
+      })
+      
+      // Small delay to ensure UI updates
+      setTimeout(() => {
+        onOpenChange(false)
+        resetForm()
+      }, 500)
+      
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create branch",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const resetForm = () => {
     setFormData({
       name: "",
-      location: "",
+      region: "",
+      district: "",
+      address: "",
       phone: "",
-      email: "",
-      manager: "",
-      status: "active",
+      status: "ACTIVE",
+      center_id: centers.length > 0 ? centers[0].id : 0,
     })
+  }
+
+  const handleClose = () => {
+    onOpenChange(false)
+    resetForm()
   }
 
   return (
@@ -49,72 +131,116 @@ export function CreateBranchDialog({ open, onOpenChange }: CreateBranchDialogPro
             <Label htmlFor="name">Branch Name</Label>
             <Input
               id="name"
-              placeholder="e.g., Downtown Branch"
+              placeholder="e.g., Chilonzor filiali"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               required
+              disabled={loading}
             />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="location">Location</Label>
-            <Input
-              id="location"
-              placeholder="e.g., 123 Main St, City Center"
-              value={formData.location}
-              onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-              required
-            />
-          </div>
+          
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="phone">Phone</Label>
+              <Label htmlFor="region">Region</Label>
               <Input
-                id="phone"
-                placeholder="+1 (555) 123-4567"
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                id="region"
+                placeholder="e.g., Toshkent"
+                value={formData.region}
+                onChange={(e) => setFormData({ ...formData, region: e.target.value })}
                 required
+                disabled={loading}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="district">District</Label>
               <Input
-                id="email"
-                type="email"
-                placeholder="branch@trainingcenter.com"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                id="district"
+                placeholder="e.g., Chilonzor"
+                value={formData.district}
+                onChange={(e) => setFormData({ ...formData, district: e.target.value })}
                 required
+                disabled={loading}
               />
             </div>
           </div>
+
           <div className="space-y-2">
-            <Label htmlFor="manager">Manager Name</Label>
-            <Input
-              id="manager"
-              placeholder="e.g., John Smith"
-              value={formData.manager}
-              onChange={(e) => setFormData({ ...formData, manager: e.target.value })}
+            <Label htmlFor="address">Address</Label>
+            <Textarea
+              id="address"
+              placeholder="e.g., Chilonzor 9-kvartal"
+              value={formData.address}
+              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
               required
+              disabled={loading}
+              rows={2}
             />
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="phone">Phone</Label>
+            <Input
+              id="phone"
+              placeholder="+998901234567"
+              value={formData.phone}
+              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              required
+              disabled={loading}
+            />
+            <p className="text-xs text-muted-foreground">Format: +998XXXXXXXXX</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="center">Center</Label>
+            <Select 
+              value={formData.center_id > 0 ? formData.center_id.toString() : ""} 
+              onValueChange={(value) => setFormData({ ...formData, center_id: parseInt(value) })}
+              disabled={loading || centersLoading}
+            >
+              <SelectTrigger id="center">
+                <SelectValue placeholder={centersLoading ? "Loading centers..." : "Select center"} />
+              </SelectTrigger>
+              <SelectContent>
+                {centers.map((center) => (
+                  <SelectItem key={center.id} value={center.id.toString()}>
+                    {center.name} - {center.region}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {centersLoading && (
+              <p className="text-xs text-muted-foreground">Loading centers...</p>
+            )}
+            {!centersLoading && centers.length === 0 && (
+              <p className="text-xs text-muted-foreground text-red-500">No centers found</p>
+            )}
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="status">Status</Label>
-            <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
+            <Select 
+              value={formData.status} 
+              onValueChange={(value: "ACTIVE" | "INACTIVE") => setFormData({ ...formData, status: value })}
+              disabled={loading}
+            >
               <SelectTrigger id="status">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
+                <SelectItem value="ACTIVE">Active</SelectItem>
+                <SelectItem value="INACTIVE">Inactive</SelectItem>
               </SelectContent>
             </Select>
           </div>
+
           <div className="flex gap-3 justify-end pt-4">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={handleClose} disabled={loading}>
               Cancel
             </Button>
-            <Button type="submit">Create Branch</Button>
+            <Button type="submit" disabled={loading}>
+              {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Create Branch
+            </Button>
           </div>
         </form>
       </DialogContent>

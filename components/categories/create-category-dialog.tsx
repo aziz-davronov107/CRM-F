@@ -6,41 +6,85 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useState } from "react"
+import { useCategories } from "@/hooks/use-categories"
+import { useBranches } from "@/hooks/use-branches"
+import { createCategorySchema } from "@/lib/schemas"
+import { toast } from "@/hooks/use-toast"
+import type { CreateCategoryData } from "@/lib/types"
 
 interface CreateCategoryDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  branchId?: number
 }
 
-const colorOptions = [
-  { name: "Blue", value: "bg-blue-500" },
-  { name: "Green", value: "bg-green-500" },
-  { name: "Purple", value: "bg-purple-500" },
-  { name: "Orange", value: "bg-orange-500" },
-  { name: "Red", value: "bg-red-500" },
-  { name: "Pink", value: "bg-pink-500" },
-  { name: "Indigo", value: "bg-indigo-500" },
-  { name: "Cyan", value: "bg-cyan-500" },
-]
 
-export function CreateCategoryDialog({ open, onOpenChange }: CreateCategoryDialogProps) {
+
+export function CreateCategoryDialog({ open, onOpenChange, branchId }: CreateCategoryDialogProps) {
   const [formData, setFormData] = useState({
     name: "",
-    description: "",
-    color: "bg-blue-500",
+    branchId: branchId || "",
   })
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    // Handle form submission
-    onOpenChange(false)
+  const { createCategory, isLoading } = useCategories({ 
+    branch_id: branchId || undefined,
+    enabled: false 
+  })
+  const { branches, isLoading: branchesLoading } = useBranches({ enabled: !branchId })
+
+  const resetForm = () => {
     setFormData({
       name: "",
-      description: "",
-      color: "bg-blue-500",
+      branchId: branchId || "",
     })
+    setErrors({})
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setErrors({})
+
+    try {
+      const validData = createCategorySchema.parse({
+        name: formData.name,
+        branch_id: Number(formData.branchId),
+      })
+
+      await createCategory(validData)
+      
+      toast({
+        title: "Success",
+        description: "Category created successfully",
+      })
+
+      // Optimized modal closing with delay
+      setTimeout(() => {
+        onOpenChange(false)
+        resetForm()
+      }, 500)
+    } catch (error: any) {
+      console.error("Create category error:", error)
+      
+      if (error.name === "ZodError") {
+        const fieldErrors: Record<string, string> = {}
+        error.errors.forEach((err: any) => {
+          if (err.path) {
+            fieldErrors[err.path[0]] = err.message
+          }
+        })
+        setErrors(fieldErrors)
+      } else {
+        toast({
+          title: "Error",
+          description: error.response?.data?.message || "Failed to create category",
+          variant: "destructive",
+        })
+      }
+    }
   }
 
   return (
@@ -50,47 +94,66 @@ export function CreateCategoryDialog({ open, onOpenChange }: CreateCategoryDialo
           <DialogTitle>Create New Category</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {!branchId && (
+            <div className="space-y-2">
+              <Label htmlFor="branchId">Branch</Label>
+              <Select
+                value={formData.branchId.toString()}
+                onValueChange={(value) => setFormData({ ...formData, branchId: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a branch" />
+                </SelectTrigger>
+                <SelectContent>
+                  {branches?.map((branch) => (
+                    <SelectItem key={branch.id} value={branch.id.toString()}>
+                      {branch.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.branchId && (
+                <Alert variant="destructive">
+                  <AlertDescription>{errors.branchId}</AlertDescription>
+                </Alert>
+              )}
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="name">Category Name</Label>
             <Input
               id="name"
-              placeholder="e.g., Technology"
+              placeholder="e.g., Programming Languages"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              required
+              disabled={isLoading}
             />
+            {errors.name && (
+              <Alert variant="destructive">
+                <AlertDescription>{errors.name}</AlertDescription>
+              </Alert>
+            )}
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              placeholder="Describe this category"
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              required
-            />
-          </div>
-          <div className="space-y-3">
-            <Label>Color</Label>
-            <div className="grid grid-cols-4 gap-3">
-              {colorOptions.map((color) => (
-                <button
-                  key={color.value}
-                  type="button"
-                  onClick={() => setFormData({ ...formData, color: color.value })}
-                  className={`w-full h-10 rounded-lg ${color.value} ${
-                    formData.color === color.value ? "ring-2 ring-offset-2 ring-foreground" : ""
-                  }`}
-                  title={color.name}
-                />
-              ))}
-            </div>
-          </div>
+
           <div className="flex gap-3 justify-end pt-4">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={() => {
+                onOpenChange(false)
+                resetForm()
+              }}
+              disabled={isLoading}
+            >
               Cancel
             </Button>
-            <Button type="submit">Create Category</Button>
+            <Button 
+              type="submit" 
+              disabled={isLoading || (!branchId && !formData.branchId)}
+            >
+              {isLoading ? "Creating..." : "Create Category"}
+            </Button>
           </div>
         </form>
       </DialogContent>

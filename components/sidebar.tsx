@@ -3,12 +3,13 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { Building2, Users, BookOpen, Calendar, DollarSign, BarChart3, Home, CalendarDays } from "lucide-react"
+import { Building2, Users, BookOpen, Calendar, DollarSign, BarChart3, Home, CalendarDays, Tags } from "lucide-react"
 
 const menuItems = [
   { href: "/", label: "Dashboard", icon: Home },
   { href: "/branches", label: "Branches", icon: Building2 },
   { href: "/rooms", label: "Rooms", icon: Users },
+  { href: "/categories", label: "Categories", icon: Tags },
   { href: "/courses", label: "Courses", icon: BookOpen },
   { href: "/groups", label: "Groups", icon: Calendar },
   { href: "/students", label: "Students", icon: Users },

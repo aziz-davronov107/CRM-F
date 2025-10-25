@@ -1,163 +1,307 @@
 "use client"
 
-import type React from "react"
-
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
 import { useState } from "react"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { useForm } from "react-hook-form"
+import { z } from "zod"
+import { createCourseSchema } from "@/lib/schemas"
+import { useCourses } from "@/hooks/use-courses"
+import { useBranches } from "@/hooks/use-branches" 
+import { useCategories } from "@/hooks/use-categories"
+import { useToast } from "@/hooks/use-toast"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Button } from "@/components/ui/button"
+
+type FormData = z.infer<typeof createCourseSchema>
 
 interface CreateCourseDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  branchId?: number
 }
 
-export function CreateCourseDialog({ open, onOpenChange }: CreateCourseDialogProps) {
-  const [formData, setFormData] = useState({
-    name: "",
-    category: "",
-    description: "",
-    duration: "",
-    level: "beginner",
-    maxStudents: "",
-    instructor: "",
-    status: "active",
+export function CreateCourseDialog({ open, onOpenChange, branchId }: CreateCourseDialogProps) {
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  
+  const { createCourse } = useCourses()
+  const { branches } = useBranches()
+  const { categories } = useCategories({ 
+    branch_id: branchId || undefined,
+    enabled: true 
+  })
+  const { toast } = useToast()
+
+  const form = useForm<FormData>({
+    resolver: zodResolver(createCourseSchema),
+    defaultValues: {
+      name: "",
+      description: "",
+      price: 0,
+      duration_hours: 1,
+      duration_months: 1,
+      status: "ACTIVE",
+      branch_id: branchId || undefined,
+      category_id: undefined,
+    },
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    // Handle form submission
-    onOpenChange(false)
-    setFormData({
-      name: "",
-      category: "",
-      description: "",
-      duration: "",
-      level: "beginner",
-      maxStudents: "",
-      instructor: "",
-      status: "active",
-    })
+  const selectedBranchId = form.watch("branch_id")
+
+  const handleSubmit = async (data: FormData) => {
+    try {
+      setIsSubmitting(true)
+      await createCourse(data)
+      toast({
+        title: "Success",
+        description: "Course created successfully",
+      })
+      form.reset()
+      onOpenChange(false)
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to create course",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create New Course</DialogTitle>
+          <DialogDescription>
+            Add a new course to your system
+          </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Course Name</Label>
-            <Input
-              id="name"
-              placeholder="e.g., Web Development Fundamentals"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              required
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Course Name */}
+              <div className="md:col-span-2">
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Course Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter course name" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {/* Branch Selection */}
+              <FormField
+                control={form.control}
+                name="branch_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Branch</FormLabel>
+                    <Select 
+                      onValueChange={(value) => {
+                        field.onChange(parseInt(value))
+                        // Reset category when branch changes
+                        form.resetField("category_id")
+                      }} 
+                      value={field.value?.toString()}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select branch" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {branches.map((branch) => (
+                          <SelectItem key={branch.id} value={branch.id.toString()}>
+                            {branch.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Category Selection */}
+              <FormField
+                control={form.control}
+                name="category_id"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Category</FormLabel>
+                    <Select 
+                      onValueChange={(value) => field.onChange(parseInt(value))} 
+                      value={field.value?.toString()}
+                      disabled={!selectedBranchId}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {categories.map((category) => (
+                          <SelectItem key={category.id} value={category.id.toString()}>
+                            {category.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Price */}
+              <FormField
+                control={form.control}
+                name="price"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Price</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="number" 
+                        placeholder="0" 
+                        {...field}
+                        onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Status */}
+              <FormField
+                control={form.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="ACTIVE">Active</SelectItem>
+                        <SelectItem value="INACTIVE">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Duration Hours */}
+              <FormField
+                control={form.control}
+                name="duration_hours"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Duration (hours)</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="number" 
+                        placeholder="1" 
+                        {...field}
+                        onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {/* Duration Months */}
+              <FormField
+                control={form.control}
+                name="duration_months"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Duration (months)</FormLabel>
+                    <FormControl>
+                      <Input 
+                        type="number" 
+                        placeholder="1" 
+                        {...field}
+                        onChange={(e) => field.onChange(parseInt(e.target.value) || 1)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            {/* Description */}
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description</FormLabel>
+                  <FormControl>
+                    <Textarea 
+                      placeholder="Enter course description" 
+                      className="min-h-[100px]"
+                      {...field} 
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              placeholder="Describe the course content and objectives"
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              required
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="category">Category</Label>
-              <Select
-                value={formData.category}
-                onValueChange={(value) => setFormData({ ...formData, category: value })}
+
+            <div className="flex justify-end gap-3 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={isSubmitting}
               >
-                <SelectTrigger id="category">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Technology">Technology</SelectItem>
-                  <SelectItem value="Business">Business</SelectItem>
-                  <SelectItem value="Design">Design</SelectItem>
-                  <SelectItem value="Marketing">Marketing</SelectItem>
-                  <SelectItem value="Other">Other</SelectItem>
-                </SelectContent>
-              </Select>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Creating..." : "Create Course"}
+              </Button>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="level">Level</Label>
-              <Select value={formData.level} onValueChange={(value) => setFormData({ ...formData, level: value })}>
-                <SelectTrigger id="level">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="beginner">Beginner</SelectItem>
-                  <SelectItem value="intermediate">Intermediate</SelectItem>
-                  <SelectItem value="advanced">Advanced</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="duration">Duration</Label>
-              <Input
-                id="duration"
-                placeholder="e.g., 8 weeks"
-                value={formData.duration}
-                onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="maxStudents">Max Students</Label>
-              <Input
-                id="maxStudents"
-                type="number"
-                placeholder="e.g., 30"
-                value={formData.maxStudents}
-                onChange={(e) => setFormData({ ...formData, maxStudents: e.target.value })}
-                required
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="instructor">Instructor</Label>
-              <Input
-                id="instructor"
-                placeholder="e.g., John Smith"
-                value={formData.instructor}
-                onChange={(e) => setFormData({ ...formData, instructor: e.target.value })}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="status">Status</Label>
-              <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
-                <SelectTrigger id="status">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="inactive">Inactive</SelectItem>
-                  <SelectItem value="archived">Archived</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <div className="flex gap-3 justify-end pt-4">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit">Create Course</Button>
-          </div>
-        </form>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   )
