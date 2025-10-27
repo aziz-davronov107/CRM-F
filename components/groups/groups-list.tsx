@@ -1,11 +1,12 @@
 "use client"
 
 import { useState } from "react"
-import { Edit2, Trash2, Users, Calendar, Clock, MapPin, BookOpen, User } from "lucide-react"
+import { Edit2, Trash2, Users, Calendar, Clock, MapPin, BookOpen, User, Eye, UserPlus } from "lucide-react"
 import { Group, DayOfWeek } from "@/lib/types"
 import { useGroups } from "@/hooks/use-groups"
 import { useToast } from "@/hooks/use-toast"
 import { EditGroupDialog } from "./edit-group-dialog"
+import { GroupDetailDialog } from "./group-detail-dialog"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -28,6 +29,8 @@ interface GroupsListProps {
 export function GroupsList({ groups, loading }: GroupsListProps) {
   const [editingGroup, setEditingGroup] = useState<Group | null>(null)
   const [deletingGroup, setDeletingGroup] = useState<Group | null>(null)
+  const [viewingGroup, setViewingGroup] = useState<Group | null>(null)
+  const [initialTab, setInitialTab] = useState<string>("overview")
   
   const { deleteGroup } = useGroups()
   const { toast } = useToast()
@@ -131,9 +134,12 @@ export function GroupsList({ groups, loading }: GroupsListProps) {
           </Card>
         ) : (
           groups.map((group) => (
-            <Card key={group.id} className="p-6">
+            <Card key={group.id} className="p-6 hover:shadow-md transition-shadow cursor-pointer">
               <div className="flex items-start justify-between">
-                <div className="flex-1">
+                <div 
+                  className="flex-1" 
+                  onClick={() => setViewingGroup(group)}
+                >
                   <div className="flex items-center gap-3 mb-3">
                     <h3 className="text-lg font-semibold text-foreground">{group.name}</h3>
                     <Badge variant={getStatusBadgeVariant(group.status)}>{group.status}</Badge>
@@ -143,6 +149,11 @@ export function GroupsList({ groups, loading }: GroupsListProps) {
                     <div className="flex items-center gap-2 mb-3 text-sm text-muted-foreground">
                       <BookOpen className="w-4 h-4 text-blue-600" />
                       <span className="text-foreground font-medium">{group.course.name}</span>
+                      {group.course.price && (
+                        <span className="text-sm text-muted-foreground">
+                          (${group.course.price.toLocaleString()})
+                        </span>
+                      )}
                     </div>
                   )}
                   
@@ -164,7 +175,9 @@ export function GroupsList({ groups, loading }: GroupsListProps) {
                     {group.room && (
                       <div className="flex items-center gap-2 text-muted-foreground">
                         <MapPin className="w-4 h-4 text-red-600" />
-                        <span className="text-foreground font-medium">{group.room.name}</span>
+                        <span className="text-foreground font-medium">
+                          {group.room.name} (Cap: {group.room.capacity})
+                        </span>
                       </div>
                     )}
                     
@@ -193,18 +206,49 @@ export function GroupsList({ groups, loading }: GroupsListProps) {
                 </div>
                 
                 <div className="flex gap-2 ml-4">
-                  <Button variant="outline" size="sm" onClick={() => setEditingGroup(group)} className="gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setInitialTab("students")
+                      setViewingGroup(group)
+                    }}
+                  >
+                    <Users className="w-4 h-4 mr-1" />
+                    Students
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setInitialTab("overview")
+                      setViewingGroup(group)
+                    }}
+                  >
+                    <Eye className="w-4 h-4" />
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setEditingGroup(group)
+                    }}
+                  >
                     <Edit2 className="w-4 h-4" />
-                    Edit
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setDeletingGroup(group)}
-                    className="gap-2 text-destructive hover:text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setDeletingGroup(group)
+                    }}
+                    className="text-destructive hover:text-destructive"
                   >
                     <Trash2 className="w-4 h-4" />
-                    Delete
                   </Button>
                 </div>
               </div>
@@ -212,6 +256,16 @@ export function GroupsList({ groups, loading }: GroupsListProps) {
           ))
         )}
       </div>
+      
+      {/* Group Detail Dialog */}
+      {viewingGroup && (
+        <GroupDetailDialog
+          group={viewingGroup}
+          open={!!viewingGroup}
+          onOpenChange={(open) => !open && setViewingGroup(null)}
+          initialTab={initialTab}
+        />
+      )}
       
       {/* Edit Group Dialog */}
       {editingGroup && (

@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { Building2, Users, BookOpen, Calendar, DollarSign, BarChart3, Home, CalendarDays, Tags } from "lucide-react"
+import { Building2, Users, BookOpen, Calendar, DollarSign, BarChart3, Home, CalendarDays, Tags, UserPlus } from "lucide-react"
 
 const menuItems = [
   { href: "/", label: "Dashboard", icon: Home },
@@ -13,6 +13,7 @@ const menuItems = [
   { href: "/courses", label: "Courses", icon: BookOpen },
   { href: "/groups", label: "Groups", icon: Calendar },
   { href: "/students", label: "Students", icon: Users },
+  { href: "/student-groups", label: "Student Groups", icon: UserPlus },
   { href: "/teachers", label: "Teachers", icon: Users },
   { href: "/schedule", label: "Schedule", icon: CalendarDays },
   { href: "/finance", label: "Finance", icon: DollarSign },

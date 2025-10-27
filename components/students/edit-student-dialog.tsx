@@ -7,55 +7,80 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Slider } from "@/components/ui/slider"
+import { Textarea } from "@/components/ui/textarea"
 import { useState, useEffect } from "react"
-
-interface Student {
-  id: string
-  name: string
-  email: string
-  phone: string
-  enrolledCourses: string[]
-  joinDate: string
-  status: "active" | "inactive" | "suspended"
-  branch: string
-  progress: number
-}
+import { useStudents } from "@/hooks/use-students"
+import type { Student, UpdateStudentData, StudentStatus, Gender } from "@/lib/types"
 
 interface EditStudentDialogProps {
   student: Student
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSave: (student: Student) => void
 }
 
-const courseOptions = [
-  "Web Development Fundamentals",
-  "Advanced React Patterns",
-  "Business Communication",
-  "Data Science Basics",
-]
-
-export function EditStudentDialog({ student, open, onOpenChange, onSave }: EditStudentDialogProps) {
-  const [formData, setFormData] = useState(student)
+export function EditStudentDialog({ student, open, onOpenChange }: EditStudentDialogProps) {
+  const { updateStudent } = useStudents()
+  const [loading, setLoading] = useState(false)
+  const [formData, setFormData] = useState<UpdateStudentData>({
+    fullname: "",
+    email: "",
+    phone: "",
+    gender: "MALE",
+    birthday: "",
+    status: "ACTIVE",
+    description: "",
+    other_details: ""
+  })
 
   useEffect(() => {
-    setFormData(student)
+    if (student) {
+      setFormData({
+        fullname: student.fullname,
+        email: student.email,
+        phone: student.phone,
+        gender: student.gender,
+        birthday: student.birthday ? student.birthday.split('T')[0] : "",
+        status: student.status,
+        description: student.description || "",
+        other_details: student.other_details || ""
+      })
+    }
   }, [student])
 
-  const handleCourseChange = (course: string) => {
-    setFormData({
-      ...formData,
-      enrolledCourses: formData.enrolledCourses.includes(course)
-        ? formData.enrolledCourses.filter((c) => c !== course)
-        : [...formData.enrolledCourses, course],
-    })
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    setLoading(true)
+    try {
+      await updateStudent(student.id, formData)
+      onOpenChange(false)
+    } catch (error) {
+      console.error("Error updating student:", error)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    onSave(formData)
+  const formatPhoneNumber = (value: string) => {
+    // Remove all non-digits
+    const digits = value.replace(/\D/g, '')
+    
+    // Check if it starts with 998, if not add it
+    if (digits.length > 0 && !digits.startsWith('998')) {
+      return '+998' + digits.slice(-9)
+    }
+    
+    // Format as +998XXXXXXXXX
+    if (digits.startsWith('998')) {
+      return '+' + digits
+    }
+    
+    return value
+  }
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatPhoneNumber(e.target.value)
+    setFormData({ ...formData, phone: formatted })
   }
 
   return (
@@ -67,11 +92,11 @@ export function EditStudentDialog({ student, open, onOpenChange, onSave }: EditS
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
+              <Label htmlFor="fullname">Full Name</Label>
               <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                id="fullname"
+                value={formData.fullname}
+                onChange={(e) => setFormData({ ...formData, fullname: e.target.value })}
                 required
               />
             </div>
@@ -86,80 +111,90 @@ export function EditStudentDialog({ student, open, onOpenChange, onSave }: EditS
               />
             </div>
           </div>
+          
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="phone">Phone</Label>
               <Input
                 id="phone"
                 value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                onChange={handlePhoneChange}
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="branch">Branch</Label>
-              <Select value={formData.branch} onValueChange={(value) => setFormData({ ...formData, branch: value })}>
-                <SelectTrigger id="branch">
+              <Label htmlFor="gender">Gender</Label>
+              <Select 
+                value={formData.gender} 
+                onValueChange={(value: Gender) => setFormData({ ...formData, gender: value })}
+              >
+                <SelectTrigger id="gender">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Downtown Branch">Downtown Branch</SelectItem>
-                  <SelectItem value="Uptown Branch">Uptown Branch</SelectItem>
-                  <SelectItem value="Westside Branch">Westside Branch</SelectItem>
+                  <SelectItem value="MALE">Male</SelectItem>
+                  <SelectItem value="FEMALE">Female</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
-          <div className="space-y-3">
-            <Label>Enrolled Courses</Label>
+
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              {courseOptions.map((course) => (
-                <div key={course} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={course}
-                    checked={formData.enrolledCourses.includes(course)}
-                    onCheckedChange={() => handleCourseChange(course)}
-                  />
-                  <Label htmlFor={course} className="font-normal cursor-pointer">
-                    {course}
-                  </Label>
-                </div>
-              ))}
+              <Label htmlFor="birthday">Date of Birth</Label>
+              <Input
+                id="birthday"
+                type="date"
+                value={formData.birthday}
+                onChange={(e) => setFormData({ ...formData, birthday: e.target.value })}
+                max={new Date(new Date().setFullYear(new Date().getFullYear() - 14)).toISOString().split('T')[0]}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="status">Status</Label>
+              <Select 
+                value={formData.status} 
+                onValueChange={(value: StudentStatus) => setFormData({ ...formData, status: value })}
+              >
+                <SelectTrigger id="status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ACTIVE">Active</SelectItem>
+                  <SelectItem value="INACTIVE">Inactive</SelectItem>
+                  <SelectItem value="GRADUATED">Graduated</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
-          <div className="space-y-3">
-            <Label>Progress: {formData.progress}%</Label>
-            <Slider
-              value={[formData.progress]}
-              onValueChange={(value) => setFormData({ ...formData, progress: value[0] })}
-              min={0}
-              max={100}
-              step={5}
+
+          <div className="space-y-2">
+            <Label htmlFor="description">Description</Label>
+            <Textarea
+              id="description"
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              rows={3}
             />
           </div>
+
           <div className="space-y-2">
-            <Label htmlFor="status">Status</Label>
-            <Select
-              value={formData.status}
-              onValueChange={(value) =>
-                setFormData({ ...formData, status: value as "active" | "inactive" | "suspended" })
-              }
-            >
-              <SelectTrigger id="status">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
-                <SelectItem value="suspended">Suspended</SelectItem>
-              </SelectContent>
-            </Select>
+            <Label htmlFor="other_details">Other Details</Label>
+            <Textarea
+              id="other_details"
+              value={formData.other_details}
+              onChange={(e) => setFormData({ ...formData, other_details: e.target.value })}
+              rows={2}
+            />
           </div>
+
           <div className="flex gap-3 justify-end pt-4">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit">Save Changes</Button>
+            <Button type="submit" disabled={loading}>
+              {loading ? "Saving..." : "Save Changes"}
+            </Button>
           </div>
         </form>
       </DialogContent>
